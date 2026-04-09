@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Cleaner — No Shorts, No Ads, No Sidebar + SponsorBlock UI
 // @namespace    https://github.com/youtube-cleaner
-// @version      8.0
-// @description  Removes Shorts, ads, Up Next sidebar, clutter. Adds Danish comment toggle button, SponsorBlock settings UI, seek bar markers and skip button.
+// @version      8.1
+// @description  Removes Shorts, ads, Up Next sidebar, clutter. Adds Danish comment toggle button, SponsorBlock settings UI, player badge, seek bar markers and skip button.
 // @author       PG
 // @match        https://www.youtube.com/*
 // @match        https://youtube.com/*
@@ -22,33 +22,33 @@
   let lastUrl = location.href;
 
   // ─────────────────────────────────────────────────────────────
-  //  Helpers
+  //  Small DOM helpers
   // ─────────────────────────────────────────────────────────────
 
   function create(tag, props = {}, children = []) {
-    const node = document.createElement(tag);
+    const el = document.createElement(tag);
 
     for (const [key, value] of Object.entries(props)) {
       if (value == null) continue;
 
       if (key === 'className') {
-        node.className = value;
+        el.className = value;
       } else if (key === 'textContent') {
-        node.textContent = value;
+        el.textContent = value;
       } else if (key === 'style' && typeof value === 'object') {
-        Object.assign(node.style, value);
+        Object.assign(el.style, value);
       } else if (key === 'dataset' && typeof value === 'object') {
-        Object.assign(node.dataset, value);
+        Object.assign(el.dataset, value);
       } else if (key.startsWith('on') && typeof value === 'function') {
-        node.addEventListener(key.slice(2).toLowerCase(), value);
-      } else if (key in node) {
+        el.addEventListener(key.slice(2).toLowerCase(), value);
+      } else if (key in el) {
         try {
-          node[key] = value;
+          el[key] = value;
         } catch (_) {
-          node.setAttribute(key, String(value));
+          el.setAttribute(key, String(value));
         }
       } else {
-        node.setAttribute(key, String(value));
+        el.setAttribute(key, String(value));
       }
     }
 
@@ -56,17 +56,17 @@
     for (const child of list) {
       if (child == null) continue;
       if (typeof child === 'string') {
-        node.appendChild(document.createTextNode(child));
+        el.appendChild(document.createTextNode(child));
       } else {
-        node.appendChild(child);
+        el.appendChild(child);
       }
     }
 
-    return node;
+    return el;
   }
 
-  function clearChildren(node) {
-    while (node.firstChild) node.removeChild(node.firstChild);
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
 
   function createSvgIcon(pathD, { width = 24, height = 24, viewBox = '0 0 24 24' } = {}) {
@@ -86,18 +86,13 @@
     return svg;
   }
 
-  function isDarkTheme() {
-    return document.documentElement.hasAttribute('dark') ||
-      !!document.querySelector('ytd-app[is-dark-theme]');
-  }
-
   function debounceFrame(fn) {
-    let scheduled = false;
+    let queued = false;
     return function (...args) {
-      if (scheduled) return;
-      scheduled = true;
+      if (queued) return;
+      queued = true;
       requestAnimationFrame(() => {
-        scheduled = false;
+        queued = false;
         fn(...args);
       });
     };
@@ -107,11 +102,35 @@
     return Math.min(max, Math.max(min, n));
   }
 
+  function isDarkTheme() {
+    return document.documentElement.hasAttribute('dark') ||
+      !!document.querySelector('ytd-app[is-dark-theme]');
+  }
+
   // ─────────────────────────────────────────────────────────────
-  //  SponsorBlock settings / metadata
+  //  Icons
   // ─────────────────────────────────────────────────────────────
 
-  const SB_STORAGE_KEY = 'ytCleanerSponsorBlockSettingsV2';
+  const EYE_OPEN_PATH =
+    'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3Z';
+
+  const EYE_OFF_PATH =
+    'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75C21.27 7.61 17 4.5 12 4.5c-1.24 0-2.43.2-3.54.57l2.16 2.16C11.21 7.13 11.6 7 12 7ZM2 4.27l2.28 2.28.46.46A11.8 11.8 0 001 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27ZM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2Zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01Z';
+
+  const SB_SHIELD_PATH =
+    'M12 2 4 5v6c0 5.05 3.4 9.78 8 11 4.6-1.22 8-5.95 8-11V5l-8-3Zm0 2.1 6 2.25V11c0 4.04-2.57 7.92-6 9.1-3.43-1.18-6-5.06-6-9.1V6.35L12 4.1Z';
+
+  const SB_GEAR_PATH =
+    'M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.09 7.09 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z';
+
+  const SB_SKIP_PATH =
+    'M6 6v12l8.5-6L6 6Zm10 0h2v12h-2V6Z';
+
+  // ─────────────────────────────────────────────────────────────
+  //  SponsorBlock settings
+  // ─────────────────────────────────────────────────────────────
+
+  const SB_STORAGE_KEY = 'ytCleanerSponsorBlockSettings_v3';
 
   const SB_CATEGORY_META = {
     sponsor: {
@@ -130,13 +149,13 @@
       label: 'Like / subscribe',
       color: '#00bcd4',
       defaultMode: 'manual',
-      description: 'Call-to-action segmenter'
+      description: 'Call to action'
     },
     intro: {
       label: 'Intro',
       color: '#ff9800',
       defaultMode: 'manual',
-      description: 'Intro-animationer'
+      description: 'Introsekvenser'
     },
     outro: {
       label: 'Outro',
@@ -148,25 +167,19 @@
       label: 'Preview / recap',
       color: '#2196f3',
       defaultMode: 'manual',
-      description: 'Recaps og previews'
-    },
-    hook: {
-      label: 'Hook',
-      color: '#ff4081',
-      defaultMode: 'manual',
-      description: 'Hook / teaser'
-    },
-    filler: {
-      label: 'Filler',
-      color: '#9e9e9e',
-      defaultMode: 'off',
-      description: 'Aggressiv kategori'
+      description: 'Preview og recap'
     },
     poi_highlight: {
       label: 'Højdepunkt',
       color: '#ffffff',
       defaultMode: 'manual',
       description: 'Spring til highlight'
+    },
+    filler: {
+      label: 'Filler',
+      color: '#9e9e9e',
+      defaultMode: 'off',
+      description: 'Aggressiv kategori'
     },
     music_offtopic: {
       label: 'Ikke-musik',
@@ -188,6 +201,7 @@
     showSeekBarSegments: true,
     showSkipButton: true,
     showMenuEntry: true,
+    showPlayerChromeButton: true,
     categoryModes: Object.fromEntries(
       Object.entries(SB_CATEGORY_META).map(([key, meta]) => [key, meta.defaultMode])
     )
@@ -199,20 +213,11 @@
 
   function normalizeSBSettings(raw) {
     const out = deepClone(SB_DEFAULT_SETTINGS);
-
     if (!raw || typeof raw !== 'object') return out;
 
-    out.enabled = typeof raw.enabled === 'boolean' ? raw.enabled : out.enabled;
-    out.showToast = typeof raw.showToast === 'boolean' ? raw.showToast : out.showToast;
-    out.showSeekBarSegments = typeof raw.showSeekBarSegments === 'boolean'
-      ? raw.showSeekBarSegments
-      : out.showSeekBarSegments;
-    out.showSkipButton = typeof raw.showSkipButton === 'boolean'
-      ? raw.showSkipButton
-      : out.showSkipButton;
-    out.showMenuEntry = typeof raw.showMenuEntry === 'boolean'
-      ? raw.showMenuEntry
-      : out.showMenuEntry;
+    for (const key of ['enabled', 'showToast', 'showSeekBarSegments', 'showSkipButton', 'showMenuEntry', 'showPlayerChromeButton']) {
+      if (typeof raw[key] === 'boolean') out[key] = raw[key];
+    }
 
     if (raw.categoryModes && typeof raw.categoryModes === 'object') {
       for (const key of Object.keys(SB_CATEGORY_META)) {
@@ -249,6 +254,7 @@
     fetchedForVideoId: '',
     fetching: false,
     segments: [],
+    fetchError: '',
     activeMuteSegment: null,
     muteRestoreState: null,
     manualMuteSegmentUUID: '',
@@ -258,28 +264,9 @@
     reportedUUIDs: new Set(),
     tickTimer: null,
     markersRenderedForKey: '',
-    menuInjectedForOpenState: '',
-    lastDuration: 0
+    lastDuration: 0,
+    playerBadgeState: 'idle'
   };
-
-  // ─────────────────────────────────────────────────────────────
-  //  Icons / paths
-  // ─────────────────────────────────────────────────────────────
-
-  const EYE_OPEN_PATH =
-    'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3Z';
-
-  const EYE_OFF_PATH =
-    'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75C21.27 7.61 17 4.5 12 4.5c-1.24 0-2.43.2-3.54.57l2.16 2.16C11.21 7.13 11.6 7 12 7ZM2 4.27l2.28 2.28.46.46A11.8 11.8 0 001 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27ZM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2Zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01Z';
-
-  const SB_MENU_ICON_PATH =
-    'M12 2 4 5v6c0 5.05 3.4 9.78 8 11 4.6-1.22 8-5.95 8-11V5l-8-3Zm0 2.1 6 2.25V11c0 4.04-2.57 7.92-6 9.1-3.43-1.18-6-5.06-6-9.1V6.35L12 4.1Zm-1.65 3.9-1.4 1.4L10.54 11l-1.59 1.6 1.4 1.4 1.6-1.59 1.59 1.59 1.4-1.4L13.35 11l1.59-1.6-1.4-1.4-1.59 1.59L10.35 8Z';
-
-  const SB_SKIP_ICON_PATH =
-    'M6 6v12l8.5-6L6 6Zm10 0h2v12h-2V6Z';
-
-  const SB_GEAR_ICON_PATH =
-    'M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.09 7.09 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z';
 
   // ─────────────────────────────────────────────────────────────
   //  CSS
@@ -438,11 +425,11 @@
 
     html[dark] #yt-comment-toggle-btn,
     ytd-app[is-dark-theme] #yt-comment-toggle-btn {
-      background: transparent;
       color: #fff;
+      background: transparent;
     }
 
-    /* ── SPONSORBLOCK MENU ENTRY ──────────────────────────────── */
+    /* ── SPONSORBLOCK ACCOUNT MENU ENTRY ─────────────────────── */
     #yt-cleaner-sb-menu-entry {
       display: flex;
       align-items: center;
@@ -458,7 +445,7 @@
     }
 
     #yt-cleaner-sb-menu-entry:hover {
-      background: rgba(0, 0, 0, 0.06);
+      background: rgba(0,0,0,0.06);
     }
 
     html[dark] #yt-cleaner-sb-menu-entry,
@@ -468,7 +455,7 @@
 
     html[dark] #yt-cleaner-sb-menu-entry:hover,
     ytd-app[is-dark-theme] #yt-cleaner-sb-menu-entry:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255,255,255,0.08);
     }
 
     #yt-cleaner-sb-menu-entry-icon {
@@ -507,12 +494,77 @@
       line-height: 1.35;
     }
 
-    /* ── SPONSORBLOCK SETTINGS MODAL ──────────────────────────── */
+    /* ── SPONSORBLOCK PLAYER BADGE ───────────────────────────── */
+    #yt-cleaner-sb-player-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      border: none;
+      background: transparent;
+      color: #fff;
+      cursor: pointer;
+      font-family: "Roboto", "Arial", sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1;
+      opacity: 0.96;
+    }
+
+    #yt-cleaner-sb-player-btn:hover {
+      opacity: 1;
+    }
+
+    #yt-cleaner-sb-player-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      flex: 0 0 auto;
+      pointer-events: none;
+    }
+
+    #yt-cleaner-sb-player-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #888;
+      flex: 0 0 auto;
+      pointer-events: none;
+    }
+
+    #yt-cleaner-sb-player-text {
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    #yt-cleaner-sb-player-btn[data-status="loading"] #yt-cleaner-sb-player-status-dot {
+      background: #ffb300;
+    }
+
+    #yt-cleaner-sb-player-btn[data-status="ready"] #yt-cleaner-sb-player-status-dot {
+      background: #00d400;
+    }
+
+    #yt-cleaner-sb-player-btn[data-status="none"] #yt-cleaner-sb-player-status-dot {
+      background: #9e9e9e;
+    }
+
+    #yt-cleaner-sb-player-btn[data-status="error"] #yt-cleaner-sb-player-status-dot {
+      background: #ff5252;
+    }
+
+    #yt-cleaner-sb-player-btn[data-status="off"] #yt-cleaner-sb-player-status-dot {
+      background: #616161;
+    }
+
+    /* ── SPONSORBLOCK SETTINGS MODAL ─────────────────────────── */
     #yt-cleaner-sb-settings-overlay {
       position: fixed;
       inset: 0;
       z-index: 999999;
-      background: rgba(0, 0, 0, 0.58);
+      background: rgba(0,0,0,0.58);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -521,13 +573,13 @@
     }
 
     #yt-cleaner-sb-settings-modal {
-      width: min(860px, calc(100vw - 48px));
-      max-height: min(86vh, 900px);
+      width: min(900px, calc(100vw - 48px));
+      max-height: min(88vh, 920px);
       overflow: auto;
-      border-radius: 18px;
+      border-radius: 20px;
       background: #fff;
       color: #0f0f0f;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+      box-shadow: 0 20px 56px rgba(0,0,0,0.34);
       font-family: "Roboto", "Arial", sans-serif;
     }
 
@@ -539,34 +591,41 @@
 
     .yt-cleaner-sb-modal-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 20px 22px 14px;
+      padding: 24px 24px 18px;
       position: sticky;
       top: 0;
       background: inherit;
       z-index: 1;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+
+    html[dark] .yt-cleaner-sb-modal-header,
+    ytd-app[is-dark-theme] .yt-cleaner-sb-modal-header {
+      border-bottom-color: rgba(255,255,255,0.08);
     }
 
     .yt-cleaner-sb-modal-title-wrap {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       min-width: 0;
     }
 
     .yt-cleaner-sb-modal-icon {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      flex: 0 0 auto;
     }
 
     .yt-cleaner-sb-modal-icon svg {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       fill: currentColor;
     }
 
@@ -577,10 +636,10 @@
     }
 
     .yt-cleaner-sb-modal-subtitle {
-      margin-top: 4px;
+      margin-top: 5px;
       font-size: 13px;
-      opacity: 0.78;
-      line-height: 1.4;
+      opacity: 0.76;
+      line-height: 1.45;
     }
 
     .yt-cleaner-sb-close-btn,
@@ -594,49 +653,55 @@
 
     .yt-cleaner-sb-close-btn {
       padding: 10px 14px;
-      background: rgba(0, 0, 0, 0.08);
+      background: rgba(0,0,0,0.08);
       color: inherit;
       font-size: 14px;
+      line-height: 1;
+      flex: 0 0 auto;
     }
 
     html[dark] .yt-cleaner-sb-close-btn,
     ytd-app[is-dark-theme] .yt-cleaner-sb-close-btn {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255,255,255,0.10);
+    }
+
+    .yt-cleaner-sb-content {
+      padding: 20px 24px 8px;
     }
 
     .yt-cleaner-sb-section {
-      padding: 0 22px 18px;
+      margin-bottom: 24px;
     }
 
     .yt-cleaner-sb-section-title {
       font-size: 15px;
       font-weight: 500;
-      margin: 0 0 10px;
+      margin: 0 0 12px;
     }
 
     .yt-cleaner-sb-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 14px;
     }
 
-    @media (max-width: 720px) {
+    @media (max-width: 760px) {
       .yt-cleaner-sb-grid {
         grid-template-columns: 1fr;
       }
     }
 
     .yt-cleaner-sb-card {
-      border: 1px solid rgba(0, 0, 0, 0.09);
-      border-radius: 14px;
-      padding: 14px 14px 12px;
-      background: rgba(0, 0, 0, 0.02);
+      border: 1px solid rgba(0,0,0,0.09);
+      border-radius: 16px;
+      padding: 15px 15px 14px;
+      background: rgba(0,0,0,0.02);
     }
 
     html[dark] .yt-cleaner-sb-card,
     ytd-app[is-dark-theme] .yt-cleaner-sb-card {
-      border-color: rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
     }
 
     .yt-cleaner-sb-toggle-row,
@@ -659,7 +724,7 @@
     .yt-cleaner-sb-label {
       font-size: 14px;
       font-weight: 500;
-      line-height: 1.4;
+      line-height: 1.45;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -667,10 +732,10 @@
     }
 
     .yt-cleaner-sb-desc {
-      margin-top: 3px;
+      margin-top: 4px;
       font-size: 12px;
-      opacity: 0.72;
-      line-height: 1.4;
+      opacity: 0.74;
+      line-height: 1.45;
     }
 
     .yt-cleaner-sb-color-dot {
@@ -678,12 +743,13 @@
       height: 10px;
       border-radius: 999px;
       display: inline-block;
-      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.2) inset;
+      flex: 0 0 auto;
     }
 
     html[dark] .yt-cleaner-sb-color-dot,
     ytd-app[is-dark-theme] .yt-cleaner-sb-color-dot {
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.22) inset;
     }
 
     .yt-cleaner-sb-switch {
@@ -703,14 +769,14 @@
     .yt-cleaner-sb-switch-track {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.18);
+      background: rgba(0,0,0,0.18);
       border-radius: 999px;
       transition: background 0.15s ease;
     }
 
     html[dark] .yt-cleaner-sb-switch-track,
     ytd-app[is-dark-theme] .yt-cleaner-sb-switch-track {
-      background: rgba(255, 255, 255, 0.18);
+      background: rgba(255,255,255,0.18);
     }
 
     .yt-cleaner-sb-switch-thumb {
@@ -722,7 +788,7 @@
       border-radius: 999px;
       background: #fff;
       transition: transform 0.15s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.22);
     }
 
     .yt-cleaner-sb-switch input:checked + .yt-cleaner-sb-switch-track {
@@ -734,32 +800,47 @@
     }
 
     .yt-cleaner-sb-select {
-      border: 1px solid rgba(0, 0, 0, 0.16);
+      border: 1px solid rgba(0,0,0,0.16);
       border-radius: 10px;
       padding: 8px 12px;
-      min-width: 112px;
+      min-width: 116px;
       background: #fff;
       color: #0f0f0f;
       font-family: inherit;
       font-size: 13px;
       outline: none;
+      flex: 0 0 auto;
     }
 
     html[dark] .yt-cleaner-sb-select,
     ytd-app[is-dark-theme] .yt-cleaner-sb-select {
       background: #2c2c2c;
       color: #fff;
-      border-color: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255,255,255,0.14);
+    }
+
+    .yt-cleaner-sb-note {
+      font-size: 12px;
+      opacity: 0.74;
+      line-height: 1.55;
+      margin-top: 4px;
     }
 
     .yt-cleaner-sb-footer {
       display: flex;
       justify-content: flex-end;
       gap: 10px;
-      padding: 0 22px 22px;
+      padding: 0 24px 24px;
       position: sticky;
       bottom: 0;
       background: inherit;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      padding-top: 16px;
+    }
+
+    html[dark] .yt-cleaner-sb-footer,
+    ytd-app[is-dark-theme] .yt-cleaner-sb-footer {
+      border-top-color: rgba(255,255,255,0.08);
     }
 
     .yt-cleaner-sb-primary-btn,
@@ -767,6 +848,7 @@
       padding: 10px 16px;
       font-size: 14px;
       font-weight: 500;
+      line-height: 1;
     }
 
     .yt-cleaner-sb-primary-btn {
@@ -775,20 +857,13 @@
     }
 
     .yt-cleaner-sb-secondary-btn {
-      background: rgba(0, 0, 0, 0.08);
+      background: rgba(0,0,0,0.08);
       color: inherit;
     }
 
     html[dark] .yt-cleaner-sb-secondary-btn,
     ytd-app[is-dark-theme] .yt-cleaner-sb-secondary-btn {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .yt-cleaner-sb-note {
-      padding: 0 22px 16px;
-      font-size: 12px;
-      opacity: 0.72;
-      line-height: 1.5;
+      background: rgba(255,255,255,0.10);
     }
 
     /* ── SPONSORBLOCK TOAST ───────────────────────────────────── */
@@ -804,7 +879,7 @@
       gap: 8px;
       padding: 10px 14px;
       border-radius: 12px;
-      background: rgba(15, 15, 15, 0.88);
+      background: rgba(15,15,15,0.88);
       color: #fff;
       font-family: "Roboto", "Arial", sans-serif;
       font-size: 14px;
@@ -812,7 +887,7 @@
       line-height: 1.2;
       opacity: 0;
       transition: opacity 0.18s ease;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.32);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
     }
@@ -833,14 +908,14 @@
       padding: 10px 14px;
       border: none;
       border-radius: 999px;
-      background: rgba(15, 15, 15, 0.92);
+      background: rgba(15,15,15,0.92);
       color: #fff;
       font-family: "Roboto", "Arial", sans-serif;
       font-size: 13px;
       font-weight: 500;
       line-height: 1;
       cursor: pointer;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.28);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
     }
@@ -878,7 +953,7 @@
       height: 100%;
       border-radius: 999px;
       opacity: 0.92;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
     }
 
     .yt-cleaner-sb-marker.yt-cleaner-sb-point {
@@ -905,7 +980,7 @@
   document.addEventListener('DOMContentLoaded', injectCSS, { once: true });
 
   // ─────────────────────────────────────────────────────────────
-  //  Redirect /shorts/ → /watch?v=
+  //  Redirect /shorts/
   // ─────────────────────────────────────────────────────────────
 
   function redirectShorts() {
@@ -921,6 +996,7 @@
 
   function updateCommentButton(btn) {
     if (!btn) return;
+
     const label = commentsHidden ? 'Vis kommentarer' : 'Skjul kommentarer';
     const icon = createSvgIcon(commentsHidden ? EYE_OPEN_PATH : EYE_OFF_PATH);
     const text = create('span', {
@@ -1017,7 +1093,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  SponsorBlock core
+  //  SponsorBlock helpers
   // ─────────────────────────────────────────────────────────────
 
   function getCurrentVideoId() {
@@ -1042,6 +1118,13 @@
     return document.querySelector('.html5-video-player');
   }
 
+  function getPlayerChromeHost() {
+    return (
+      document.querySelector('.ytp-right-controls-left') ||
+      document.querySelector('.ytp-right-controls')
+    );
+  }
+
   function getSBMode(category) {
     return sbSettings.categoryModes[category] || SB_CATEGORY_META[category]?.defaultMode || 'off';
   }
@@ -1056,6 +1139,59 @@
 
   function sbColor(category) {
     return SB_CATEGORY_META[category]?.color || '#3ea6ff';
+  }
+
+  function setPlayerBadge(status, text) {
+    sponsorState.playerBadgeState = status;
+
+    const btn = document.getElementById('yt-cleaner-sb-player-btn');
+    if (!btn) return;
+
+    btn.dataset.status = status;
+    btn.title = text;
+    const textNode = btn.querySelector('#yt-cleaner-sb-player-text');
+    if (textNode) textNode.textContent = text;
+  }
+
+  function injectPlayerBadge() {
+    const existing = document.getElementById('yt-cleaner-sb-player-btn');
+
+    if (!sbSettings.showPlayerChromeButton || !window.location.pathname.startsWith('/watch')) {
+      if (existing) existing.remove();
+      return;
+    }
+
+    const host = getPlayerChromeHost();
+    if (!host) return;
+
+    const settingsBtn = document.querySelector('.ytp-settings-button');
+    if (existing && existing.isConnected) {
+      if (settingsBtn && existing.nextSibling !== settingsBtn) {
+        host.insertBefore(existing, settingsBtn);
+      } else if (!existing.parentElement || existing.parentElement !== host) {
+        host.appendChild(existing);
+      }
+      return;
+    }
+
+    const btn = create('button', {
+      id: 'yt-cleaner-sb-player-btn',
+      type: 'button',
+      title: 'SponsorBlock',
+      onclick: openSBSettingsModal
+    }, [
+      createSvgIcon(SB_SHIELD_PATH, { width: 18, height: 18 }),
+      create('span', { id: 'yt-cleaner-sb-player-status-dot' }),
+      create('span', { id: 'yt-cleaner-sb-player-text', textContent: 'SB' })
+    ]);
+
+    if (settingsBtn) {
+      host.insertBefore(btn, settingsBtn);
+    } else {
+      host.appendChild(btn);
+    }
+
+    setPlayerBadge(sponsorState.playerBadgeState || 'idle', 'SB');
   }
 
   function showSponsorToast(message) {
@@ -1092,6 +1228,7 @@
     if (skipBtn) {
       skipBtn.removeAttribute('data-show');
       skipBtn.style.display = 'none';
+      skipBtn.onclick = null;
     }
   }
 
@@ -1113,20 +1250,23 @@
     sponsorState.fetchedForVideoId = '';
     sponsorState.fetching = false;
     sponsorState.segments = [];
+    sponsorState.fetchError = '';
     sponsorState.lastHandledUUID = '';
     sponsorState.lastHandledAt = 0;
     sponsorState.lastAutoPoiUUID = '';
     sponsorState.reportedUUIDs.clear();
     sponsorState.markersRenderedForKey = '';
     sponsorState.lastDuration = 0;
+    sponsorState.playerBadgeState = 'idle';
 
     clearSponsorUI();
+    setPlayerBadge('idle', 'SB');
   }
 
   function normalizeSponsorSegmentsFromResponse(data, videoId) {
     if (!Array.isArray(data)) return [];
 
-    const flat = [];
+    const out = [];
     const seen = new Set();
 
     for (const videoEntry of data) {
@@ -1137,8 +1277,8 @@
 
         const start = Number(item.segment[0] || 0);
         const endRaw = Number(item.segment[1] || 0);
-        const actionType = String(item.actionType || 'skip');
         const category = String(item.category || '');
+        const actionType = String(item.actionType || 'skip');
         const UUID = String(item.UUID || '');
 
         if (!UUID || seen.has(UUID)) continue;
@@ -1147,7 +1287,7 @@
         const isPoint = actionType === 'poi' || Math.abs(endRaw - start) < 0.001;
         const end = isPoint ? start : endRaw;
 
-        flat.push({
+        out.push({
           UUID,
           category,
           actionType,
@@ -1162,15 +1302,16 @@
       }
     }
 
-    return flat.sort((a, b) => {
+    return out.sort((a, b) => {
       if (a.start !== b.start) return a.start - b.start;
-      return (a.end - b.end);
+      return a.end - b.end;
     });
   }
 
   async function fetchSponsorSegments(videoId) {
-    if (!sbSettings.enabled || !videoId) {
+    if (!videoId || !sbSettings.enabled) {
       sponsorState.segments = [];
+      sponsorState.fetchError = '';
       renderSponsorMarkers();
       return;
     }
@@ -1178,7 +1319,9 @@
     const categories = getEnabledSBCategories();
     if (!categories.length) {
       sponsorState.segments = [];
+      sponsorState.fetchError = '';
       sponsorState.fetchedForVideoId = videoId;
+      setPlayerBadge('none', 'SB: none');
       renderSponsorMarkers();
       return;
     }
@@ -1187,6 +1330,8 @@
     if (sponsorState.fetchedForVideoId === videoId) return;
 
     sponsorState.fetching = true;
+    sponsorState.fetchError = '';
+    setPlayerBadge('loading', 'SB: loading');
 
     try {
       const hash = await sha256Hex(videoId);
@@ -1206,9 +1351,13 @@
 
       if (response.status === 404) {
         sponsorState.segments = [];
+        sponsorState.fetchError = '';
         sponsorState.fetchedForVideoId = videoId;
+        sponsorState.currentVideoId = videoId;
+        sponsorState.markersRenderedForKey = '';
         renderSponsorMarkers();
         updateSkipButton(null);
+        setPlayerBadge('none', 'SB: none');
         return;
       }
 
@@ -1218,17 +1367,25 @@
 
       const data = await response.json();
       sponsorState.segments = normalizeSponsorSegmentsFromResponse(data, videoId);
+      sponsorState.fetchError = '';
       sponsorState.fetchedForVideoId = videoId;
       sponsorState.currentVideoId = videoId;
       sponsorState.markersRenderedForKey = '';
-
       renderSponsorMarkers();
+
+      if (sponsorState.segments.length) {
+        setPlayerBadge('ready', `SB: ${sponsorState.segments.length}`);
+      } else {
+        setPlayerBadge('none', 'SB: none');
+      }
     } catch (error) {
       sponsorState.segments = [];
+      sponsorState.fetchError = String(error && error.message ? error.message : error);
       sponsorState.fetchedForVideoId = videoId;
       sponsorState.currentVideoId = videoId;
       sponsorState.markersRenderedForKey = '';
       renderSponsorMarkers();
+      setPlayerBadge('error', 'SB: error');
       console.debug('[YouTube Cleaner] SponsorBlock fetch failed:', error);
     } finally {
       sponsorState.fetching = false;
@@ -1250,7 +1407,13 @@
   }
 
   function getMarkerHost() {
-    return document.querySelector('.ytp-timed-markers-container');
+    const host = document.querySelector('.ytp-progress-bar');
+    if (!host) return null;
+    const computed = getComputedStyle(host);
+    if (computed.position === 'static') {
+      host.style.position = 'relative';
+    }
+    return host;
   }
 
   function removeMarkerLayer() {
@@ -1309,10 +1472,7 @@
       const leftPct = start * 100;
       let widthPct = (end - start) * 100;
 
-      if (seg.actionType === 'full') {
-        widthPct = 100;
-      }
-
+      if (seg.actionType === 'full') widthPct = 100;
       if (widthPct <= 0) continue;
 
       const marker = create('div', {
@@ -1350,7 +1510,6 @@
         return seg;
       }
     }
-
     return null;
   }
 
@@ -1373,14 +1532,14 @@
         return seg;
       }
     }
-
     return null;
   }
 
-  function getActiveAutoMuteSegment(currentTime) {
+  function getActiveMuteSegment(currentTime) {
     for (const seg of sponsorState.segments) {
       if (seg.actionType !== 'mute') continue;
       if (getSBMode(seg.category) !== 'auto' && sponsorState.manualMuteSegmentUUID !== seg.UUID) continue;
+
       if (currentTime >= seg.start && currentTime < seg.end) {
         return seg;
       }
@@ -1412,13 +1571,12 @@
     }
 
     reportSponsorViewed(sponsorState.activeMuteSegment.UUID);
-
     sponsorState.activeMuteSegment = null;
     sponsorState.muteRestoreState = null;
     sponsorState.manualMuteSegmentUUID = '';
   }
 
-  function executeSegmentAction(segment, source = 'manual') {
+  function executeSegmentAction(segment) {
     const video = getVideoElement();
     if (!video || !segment) return;
 
@@ -1446,10 +1604,10 @@
       const nextBtn = document.querySelector('.ytp-next-button:not([aria-disabled="true"])');
       if (nextBtn) {
         nextBtn.click();
-        showSponsorToast(`SponsorBlock: sprang video over`);
+        showSponsorToast('SponsorBlock: sprang video over');
       } else if (Number.isFinite(video.duration) && video.duration > 0) {
         video.currentTime = Math.max(0, video.duration - 0.2);
-        showSponsorToast(`SponsorBlock: sprang til slutningen`);
+        showSponsorToast('SponsorBlock: sprang til slutningen');
       }
 
       reportSponsorViewed(segment.UUID);
@@ -1504,10 +1662,9 @@
     }
 
     clearChildren(btn);
-    btn.appendChild(createSvgIcon(SB_SKIP_ICON_PATH, { width: 18, height: 18 }));
+    btn.appendChild(createSvgIcon(SB_SKIP_PATH, { width: 18, height: 18 }));
 
     let label = 'Spring over';
-
     if (segment.actionType === 'poi') {
       label = 'Til højdepunkt';
     } else if (segment.actionType === 'mute') {
@@ -1519,7 +1676,7 @@
     }
 
     btn.appendChild(create('span', { textContent: label }));
-    btn.onclick = () => executeSegmentAction(segment, 'manual');
+    btn.onclick = () => executeSegmentAction(segment);
     btn.setAttribute('data-show', 'true');
     btn.style.display = 'inline-flex';
   }
@@ -1532,13 +1689,18 @@
       updateSkipButton(null);
       removeMarkerLayer();
       sponsorState.markersRenderedForKey = '';
+      injectPlayerBadge();
+      setPlayerBadge('idle', 'SB');
       return;
     }
+
+    injectPlayerBadge();
 
     if (!sbSettings.enabled) {
       updateSkipButton(null);
       removeMarkerLayer();
       sponsorState.markersRenderedForKey = '';
+      setPlayerBadge('off', 'SB: off');
       return;
     }
 
@@ -1555,9 +1717,9 @@
     const currentTime = Number(video.currentTime || 0);
     if (!Number.isFinite(currentTime)) return;
 
-    const muteSeg = getActiveAutoMuteSegment(currentTime);
-    if (muteSeg) {
-      beginMutedSegment(video, muteSeg);
+    const activeMute = getActiveMuteSegment(currentTime);
+    if (activeMute) {
+      beginMutedSegment(video, activeMute);
     } else if (sponsorState.activeMuteSegment) {
       endMutedSegment(video);
     }
@@ -1567,16 +1729,26 @@
       if (autoSeg) {
         if (autoSeg.actionType === 'poi') {
           if (sponsorState.lastAutoPoiUUID !== autoSeg.UUID) {
-            executeSegmentAction(autoSeg, 'auto');
+            executeSegmentAction(autoSeg);
           }
         } else if (autoSeg.actionType !== 'mute') {
-          executeSegmentAction(autoSeg, 'auto');
+          executeSegmentAction(autoSeg);
         }
       }
     }
 
     const manualSeg = getSeekableManualSegment(currentTime);
     updateSkipButton(manualSeg);
+
+    if (sponsorState.fetchError) {
+      setPlayerBadge('error', 'SB: error');
+    } else if (sponsorState.fetching) {
+      setPlayerBadge('loading', 'SB: loading');
+    } else if (!sponsorState.segments.length) {
+      setPlayerBadge('none', 'SB: none');
+    } else {
+      setPlayerBadge('ready', `SB: ${sponsorState.segments.length}`);
+    }
   }
 
   function startSponsorTicker() {
@@ -1613,22 +1785,28 @@
     const titleWrap = create('div', { className: 'yt-cleaner-sb-modal-title-wrap' });
 
     const modalIcon = create('div', { className: 'yt-cleaner-sb-modal-icon' }, [
-      createSvgIcon(SB_MENU_ICON_PATH, { width: 28, height: 28 })
+      createSvgIcon(SB_GEAR_PATH, { width: 30, height: 30 })
     ]);
 
-    const titleTextWrap = create('div', {}, [
+    const titleBlock = create('div', {}, [
       create('div', {
         className: 'yt-cleaner-sb-modal-title',
         textContent: 'SponsorBlock'
       }),
       create('div', {
         className: 'yt-cleaner-sb-modal-subtitle',
-        textContent: 'UI til segmenter, skip-knap og seek bar-markeringer'
+        textContent: sponsorState.fetchError
+          ? `Status: error (${sponsorState.fetchError})`
+          : sponsorState.fetching
+            ? 'Status: loading'
+            : sponsorState.segments.length
+              ? `Status: ${sponsorState.segments.length} segmenter på denne video`
+              : 'Status: ingen segmenter på denne video'
       })
     ]);
 
     titleWrap.appendChild(modalIcon);
-    titleWrap.appendChild(titleTextWrap);
+    titleWrap.appendChild(titleBlock);
 
     const closeBtn = create('button', {
       className: 'yt-cleaner-sb-close-btn',
@@ -1640,19 +1818,22 @@
     header.appendChild(titleWrap);
     header.appendChild(closeBtn);
 
+    const content = create('div', { className: 'yt-cleaner-sb-content' });
+
     const generalSection = create('div', { className: 'yt-cleaner-sb-section' }, [
       create('div', { className: 'yt-cleaner-sb-section-title', textContent: 'Generelt' })
     ]);
 
     const generalGrid = create('div', { className: 'yt-cleaner-sb-grid' });
-
     const toggleRefs = {};
+
     const toggles = [
       ['enabled', 'Aktivér SponsorBlock', 'Tænd/sluk hele SponsorBlock-laget'],
+      ['showPlayerChromeButton', 'Vis SB i player chrome', 'Fast indikator ved siden af Indstillinger-knappen'],
       ['showSeekBarSegments', 'Vis segmenter på seek bar', 'Farvede markeringer i playerens tidslinje'],
       ['showSkipButton', 'Vis skip-knap', 'Vis manuel skip-knap når et segment er aktivt'],
       ['showToast', 'Vis toast-beskeder', 'Korte beskeder når noget bliver sprunget over'],
-      ['showMenuEntry', 'Vis menu-entry', 'Vis SponsorBlock i YouTube-kontomenuen']
+      ['showMenuEntry', 'Vis menu-entry', 'Vis SponsorBlock i kontomenuen']
     ];
 
     for (const [key, label, desc] of toggles) {
@@ -1662,7 +1843,7 @@
       });
       toggleRefs[key] = input;
 
-      const row = create('div', { className: 'yt-cleaner-sb-card' }, [
+      const card = create('div', { className: 'yt-cleaner-sb-card' }, [
         create('div', { className: 'yt-cleaner-sb-toggle-row' }, [
           create('div', { className: 'yt-cleaner-sb-label-wrap' }, [
             create('div', { className: 'yt-cleaner-sb-label', textContent: label }),
@@ -1677,7 +1858,7 @@
         ])
       ]);
 
-      generalGrid.appendChild(row);
+      generalGrid.appendChild(card);
     }
 
     generalSection.appendChild(generalGrid);
@@ -1708,10 +1889,7 @@
               }),
               create('span', { textContent: meta.label })
             ]),
-            create('div', {
-              className: 'yt-cleaner-sb-desc',
-              textContent: meta.description
-            })
+            create('div', { className: 'yt-cleaner-sb-desc', textContent: meta.description })
           ]),
           select
         ])
@@ -1722,10 +1900,17 @@
 
     categorySection.appendChild(categoryGrid);
 
-    const note = create('div', {
-      className: 'yt-cleaner-sb-note',
-      textContent: 'Bemærk: denne userscript-version tilføjer runtime-UI, markeringer, skip-knap og indstillinger. Bidrag, voting og konto-baseret submit-flow fra den fulde extension er ikke med.'
-    });
+    const noteSection = create('div', { className: 'yt-cleaner-sb-section' }, [
+      create('div', { className: 'yt-cleaner-sb-section-title', textContent: 'Info' }),
+      create('div', {
+        className: 'yt-cleaner-sb-note',
+        textContent: 'Denne userscript-version giver runtime-UI, player badge, markeringer, skip-knap og indstillinger. Submit, voting og konto-flow fra den fulde extension er ikke med.'
+      })
+    ]);
+
+    content.appendChild(generalSection);
+    content.appendChild(categorySection);
+    content.appendChild(noteSection);
 
     const footer = create('div', { className: 'yt-cleaner-sb-footer' });
 
@@ -1740,7 +1925,7 @@
         openSBSettingsModal();
         sponsorState.fetchedForVideoId = '';
         sponsorState.markersRenderedForKey = '';
-        scheduleClean();
+        queueClean();
         fetchSponsorSegments(getCurrentVideoId());
       }
     });
@@ -1763,16 +1948,14 @@
         sbSettings = normalizeSBSettings(next);
         saveSBSettings();
 
-        if (!sbSettings.showMenuEntry) {
-          const entry = document.getElementById('yt-cleaner-sb-menu-entry');
-          if (entry) entry.remove();
-        }
-
         sponsorState.fetchedForVideoId = '';
         sponsorState.markersRenderedForKey = '';
-        scheduleClean();
+        sponsorState.fetchError = '';
+
+        queueClean();
         fetchSponsorSegments(getCurrentVideoId());
         renderSponsorMarkers();
+        injectPlayerBadge();
         closeSBSettingsModal();
       }
     });
@@ -1781,9 +1964,7 @@
     footer.appendChild(saveBtn);
 
     modal.appendChild(header);
-    modal.appendChild(generalSection);
-    modal.appendChild(categorySection);
-    modal.appendChild(note);
+    modal.appendChild(content);
     modal.appendChild(footer);
 
     overlay.appendChild(modal);
@@ -1800,7 +1981,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  SponsorBlock menu entry
+  //  SponsorBlock account menu entry
   // ─────────────────────────────────────────────────────────────
 
   function getAccountMenuItemsContainer() {
@@ -1819,6 +2000,7 @@
 
   function injectSBMenuEntry() {
     const existing = document.getElementById('yt-cleaner-sb-menu-entry');
+
     if (!sbSettings.showMenuEntry) {
       if (existing) existing.remove();
       return;
@@ -1829,6 +2011,16 @@
 
     if (existing && existing.parentElement === container) return;
     if (existing) existing.remove();
+
+    const subtitle = !sbSettings.enabled
+      ? 'Slået fra'
+      : sponsorState.fetchError
+        ? 'Error'
+        : sponsorState.fetching
+          ? 'Loader…'
+          : sponsorState.segments.length
+            ? `${sponsorState.segments.length} segmenter`
+            : 'Ingen segmenter';
 
     const entry = create('div', {
       id: 'yt-cleaner-sb-menu-entry',
@@ -1847,11 +2039,11 @@
       }
     }, [
       create('div', { id: 'yt-cleaner-sb-menu-entry-icon' }, [
-        createSvgIcon(SB_GEAR_ICON_PATH, { width: 24, height: 24 })
+        createSvgIcon(SB_GEAR_PATH, { width: 24, height: 24 })
       ]),
       create('div', { id: 'yt-cleaner-sb-menu-entry-text' }, [
         create('div', { id: 'yt-cleaner-sb-menu-entry-label', textContent: 'SponsorBlock' }),
-        create('div', { id: 'yt-cleaner-sb-menu-entry-subtitle', textContent: 'Indstillinger og segmenter' })
+        create('div', { id: 'yt-cleaner-sb-menu-entry-subtitle', textContent: subtitle })
       ])
     ]);
 
@@ -1926,6 +2118,7 @@
     applyCommentVisibility();
 
     injectSBMenuEntry();
+    injectPlayerBadge();
     renderSponsorMarkers();
   }
 
@@ -1961,6 +2154,8 @@
       setTimeout(() => {
         fetchSponsorSegments(videoId);
       }, 300);
+    } else {
+      setPlayerBadge('idle', 'SB');
     }
   }
 
@@ -2025,5 +2220,7 @@
     setTimeout(() => {
       fetchSponsorSegments(initialVideoId);
     }, 300);
+  } else {
+    setPlayerBadge('idle', 'SB');
   }
 })();
