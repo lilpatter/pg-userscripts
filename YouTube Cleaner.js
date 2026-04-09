@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Cleaner — No Shorts, No Ads, No Sidebar + SponsorBlock UI
 // @namespace    https://github.com/youtube-cleaner
-// @version      8.1
+// @version      8.3
 // @description  Removes Shorts, ads, Up Next sidebar, clutter. Adds Danish comment toggle button, SponsorBlock settings UI, player badge, seek bar markers and skip button.
 // @author       PG
 // @match        https://www.youtube.com/*
@@ -17,7 +17,24 @@
   //  State
   // ─────────────────────────────────────────────────────────────
 
-  let commentsHidden = false;
+  const COMMENTS_STORAGE_KEY = 'ytCleanerCommentsHidden_v1';
+  const SB_STORAGE_KEY = 'ytCleanerSponsorBlockSettings_v3';
+
+  function loadCommentsHidden() {
+    try {
+      return localStorage.getItem(COMMENTS_STORAGE_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function saveCommentsHidden(value) {
+    try {
+      localStorage.setItem(COMMENTS_STORAGE_KEY, value ? '1' : '0');
+    } catch (_) {}
+  }
+
+  let commentsHidden = loadCommentsHidden();
   let cleanScheduled = false;
   let lastUrl = location.href;
 
@@ -102,11 +119,6 @@
     return Math.min(max, Math.max(min, n));
   }
 
-  function isDarkTheme() {
-    return document.documentElement.hasAttribute('dark') ||
-      !!document.querySelector('ytd-app[is-dark-theme]');
-  }
-
   // ─────────────────────────────────────────────────────────────
   //  Icons
   // ─────────────────────────────────────────────────────────────
@@ -130,76 +142,74 @@
   //  SponsorBlock settings
   // ─────────────────────────────────────────────────────────────
 
-  const SB_STORAGE_KEY = 'ytCleanerSponsorBlockSettings_v3';
-
   const SB_CATEGORY_META = {
-  sponsor: {
-    label: 'Sponsor',
-    color: '#00d400',
-    defaultMode: 'auto',
-    description: 'Betalte sponsorsegmenter'
-  },
-  selfpromo: {
-    label: 'Selvpromovering',
-    color: '#ffd600',
-    defaultMode: 'manual',
-    description: 'Egen promo / unpaid promo'
-  },
-  interaction: {
-    label: 'Like / subscribe',
-    color: '#00bcd4',
-    defaultMode: 'manual',
-    description: 'Call to action'
-  },
-  intro: {
-    label: 'Intro',
-    color: '#ff9800',
-    defaultMode: 'manual',
-    description: 'Introsekvenser'
-  },
-  outro: {
-    label: 'Outro',
-    color: '#9c27b0',
-    defaultMode: 'manual',
-    description: 'Outro / credits'
-  },
-  preview: {
-    label: 'Preview / recap',
-    color: '#2196f3',
-    defaultMode: 'manual',
-    description: 'Preview og recap'
-  },
-  hook: {
-    label: 'Hook',
-    color: '#ff4081',
-    defaultMode: 'manual',
-    description: 'Hook / teaser'
-  },
-  poi_highlight: {
-    label: 'Højdepunkt',
-    color: '#ffffff',
-    defaultMode: 'manual',
-    description: 'Spring til highlight'
-  },
-  filler: {
-    label: 'Filler',
-    color: '#9e9e9e',
-    defaultMode: 'off',
-    description: 'Aggressiv kategori'
-  },
-  music_offtopic: {
-    label: 'Ikke-musik',
-    color: '#8bc34a',
-    defaultMode: 'off',
-    description: 'Ikke-musikdele i musikvideoer'
-  },
-  exclusive_access: {
-    label: 'Exclusive access',
-    color: '#f44336',
-    defaultMode: 'off',
-    description: 'Hele videoen er label’et'
-  }
-};
+    sponsor: {
+      label: 'Sponsor',
+      color: '#00d400',
+      defaultMode: 'auto',
+      description: 'Betalte sponsorsegmenter'
+    },
+    selfpromo: {
+      label: 'Selvpromovering',
+      color: '#ffd600',
+      defaultMode: 'manual',
+      description: 'Egen promo / unpaid promo'
+    },
+    interaction: {
+      label: 'Like / subscribe',
+      color: '#00bcd4',
+      defaultMode: 'manual',
+      description: 'Call to action'
+    },
+    intro: {
+      label: 'Intro',
+      color: '#ff9800',
+      defaultMode: 'manual',
+      description: 'Introsekvenser'
+    },
+    outro: {
+      label: 'Outro',
+      color: '#9c27b0',
+      defaultMode: 'manual',
+      description: 'Outro / credits'
+    },
+    preview: {
+      label: 'Preview / recap',
+      color: '#2196f3',
+      defaultMode: 'manual',
+      description: 'Preview og recap'
+    },
+    hook: {
+      label: 'Hook',
+      color: '#ff4081',
+      defaultMode: 'manual',
+      description: 'Hook / teaser'
+    },
+    poi_highlight: {
+      label: 'Højdepunkt',
+      color: '#ffffff',
+      defaultMode: 'manual',
+      description: 'Spring til highlight'
+    },
+    filler: {
+      label: 'Filler',
+      color: '#9e9e9e',
+      defaultMode: 'off',
+      description: 'Aggressiv kategori'
+    },
+    music_offtopic: {
+      label: 'Ikke-musik',
+      color: '#8bc34a',
+      defaultMode: 'off',
+      description: 'Ikke-musikdele i musikvideoer'
+    },
+    exclusive_access: {
+      label: 'Exclusive access',
+      color: '#f44336',
+      defaultMode: 'off',
+      description: 'Hele videoen er label’et'
+    }
+  };
 
   const SB_DEFAULT_SETTINGS = {
     enabled: true,
@@ -501,7 +511,7 @@
     }
 
     /* ── SPONSORBLOCK PLAYER BADGE ───────────────────────────── */
-        #yt-cleaner-sb-player-btn {
+    #yt-cleaner-sb-player-btn {
       display: inline-flex;
       align-items: center;
       gap: 0;
@@ -556,7 +566,7 @@
 
     #yt-cleaner-sb-player-btn:hover #yt-cleaner-sb-player-text,
     #yt-cleaner-sb-player-btn:focus-visible #yt-cleaner-sb-player-text {
-      max-width: 80px;
+      max-width: 90px;
       opacity: 1;
       margin-left: 7px;
     }
@@ -962,31 +972,44 @@
     }
 
     /* ── SPONSORBLOCK SEEK BAR SEGMENTS ───────────────────────── */
+    .ytp-progress-list {
+      position: relative !important;
+      z-index: 1 !important;
+      overflow: visible !important;
+    }
+
+    .ytp-scrubber-container {
+      position: relative !important;
+      z-index: 5 !important;
+    }
+
     #yt-cleaner-sb-marker-layer {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      z-index: 2;
+      z-index: 3;
+      display: block;
     }
 
     .yt-cleaner-sb-marker {
       position: absolute;
-      top: 0;
-      height: 100%;
+      top: 1px;
+      height: calc(100% - 2px);
       border-radius: 999px;
-      opacity: 0.92;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+      opacity: 0.88;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
     }
 
     .yt-cleaner-sb-marker.yt-cleaner-sb-point {
-      width: 3px;
-      min-width: 3px;
-      transform: translateX(-1.5px);
-      border-radius: 2px;
+      width: 4px;
+      min-width: 4px;
+      transform: translateX(-2px);
+      border-radius: 3px;
+      opacity: 1;
     }
 
     .yt-cleaner-sb-marker.yt-cleaner-sb-full {
-      opacity: 0.3;
+      opacity: 0.28;
     }
   `;
 
@@ -1082,6 +1105,7 @@
 
   function toggleComments() {
     commentsHidden = !commentsHidden;
+    saveCommentsHidden(commentsHidden);
     applyCommentVisibility();
     const btn = document.getElementById('yt-comment-toggle-btn');
     if (btn) updateCommentButton(btn);
@@ -1163,28 +1187,26 @@
     return SB_CATEGORY_META[category]?.color || '#3ea6ff';
   }
 
-  function setPlayerBadge(status, text) {
-  sponsorState.playerBadgeState = status;
+  function setPlayerBadge(status, text = 'SB') {
+    sponsorState.playerBadgeState = status;
 
-  const btn = document.getElementById('yt-cleaner-sb-player-btn');
-  if (!btn) return;
+    const btn = document.getElementById('yt-cleaner-sb-player-btn');
+    if (!btn) return;
 
-  btn.dataset.status = status;
+    btn.dataset.status = status;
 
-  let title = 'SponsorBlock';
-  if (status === 'loading') title = 'SponsorBlock: loading';
-  if (status === 'ready') title = `SponsorBlock: ${sponsorState.segments.length} segmenter`;
-  if (status === 'none') title = 'SponsorBlock: ingen segmenter';
-  if (status === 'error') title = `SponsorBlock: ${sponsorState.fetchError || 'error'}`;
-  if (status === 'off') title = 'SponsorBlock: slået fra';
+    let title = 'SponsorBlock';
+    if (status === 'loading') title = 'SponsorBlock: loading';
+    if (status === 'ready') title = `SponsorBlock: ${sponsorState.segments.length} segmenter`;
+    if (status === 'none') title = 'SponsorBlock: ingen segmenter';
+    if (status === 'error') title = `SponsorBlock: ${sponsorState.fetchError || 'error'}`;
+    if (status === 'off') title = 'SponsorBlock: slået fra';
 
-  btn.title = title;
+    btn.title = title;
 
-  const textNode = btn.querySelector('#yt-cleaner-sb-player-text');
-  if (textNode) {
-    textNode.textContent = text || 'SB';
+    const textNode = btn.querySelector('#yt-cleaner-sb-player-text');
+    if (textNode) textNode.textContent = text;
   }
-}
 
   function injectPlayerBadge() {
     const existing = document.getElementById('yt-cleaner-sb-player-btn');
@@ -1341,96 +1363,119 @@
     });
   }
 
+  function buildSponsorFetchUrls(prefix, categories) {
+    const actionTypes = ['skip', 'mute', 'full', 'poi'];
+
+    const url1 = new URL(`https://sponsor.ajay.app/api/skipSegments/${prefix}`);
+    url1.searchParams.set('service', 'YouTube');
+    for (const category of categories) url1.searchParams.append('category', category);
+    for (const actionType of actionTypes) url1.searchParams.append('actionType', actionType);
+
+    const url2 = new URL(`https://sponsor.ajay.app/api/skipSegments/${prefix}`);
+    url2.searchParams.set('service', 'YouTube');
+    for (const category of categories) url2.searchParams.append('categories', category);
+    for (const actionType of actionTypes) url2.searchParams.append('actionTypes', actionType);
+
+    const url3 = new URL(`https://sponsor.ajay.app/api/skipSegments/${prefix}`);
+    url3.searchParams.set('service', 'YouTube');
+    url3.searchParams.set('categories', JSON.stringify(categories));
+    url3.searchParams.set('actionTypes', JSON.stringify(actionTypes));
+
+    return [url1, url2, url3];
+  }
+
   async function fetchSponsorSegments(videoId) {
-  if (!videoId || !sbSettings.enabled) {
-    sponsorState.segments = [];
-    sponsorState.fetchError = '';
-    renderSponsorMarkers();
-    return;
-  }
-
-  const categories = getEnabledSBCategories();
-  if (!categories.length) {
-    sponsorState.segments = [];
-    sponsorState.fetchError = '';
-    sponsorState.fetchedForVideoId = videoId;
-    setPlayerBadge('none', 'SB: none');
-    renderSponsorMarkers();
-    return;
-  }
-
-  if (sponsorState.fetching) return;
-  if (sponsorState.fetchedForVideoId === videoId) return;
-
-  sponsorState.fetching = true;
-  sponsorState.fetchError = '';
-  setPlayerBadge('loading', 'SB');
-
-  try {
-    const hash = await sha256Hex(videoId);
-    const prefix = hash.slice(0, 4);
-    const url = new URL(`https://sponsor.ajay.app/api/skipSegments/${prefix}`);
-
-    url.searchParams.set('service', 'YouTube');
-
-    // IMPORTANT:
-    // use repeated singular params, not repeated categories/actionTypes params
-    for (const category of categories) {
-      url.searchParams.append('category', category);
-    }
-
-    for (const actionType of ['skip', 'mute', 'full', 'poi']) {
-      url.searchParams.append('actionType', actionType);
-    }
-
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      credentials: 'omit'
-    });
-
-    if (response.status === 404) {
+    if (!videoId || !sbSettings.enabled) {
       sponsorState.segments = [];
+      sponsorState.fetchError = '';
+      renderSponsorMarkers();
+      return;
+    }
+
+    const categories = getEnabledSBCategories();
+    if (!categories.length) {
+      sponsorState.segments = [];
+      sponsorState.fetchError = '';
+      sponsorState.fetchedForVideoId = videoId;
+      setPlayerBadge('none', 'SB');
+      renderSponsorMarkers();
+      return;
+    }
+
+    if (sponsorState.fetching) return;
+    if (sponsorState.fetchedForVideoId === videoId) return;
+
+    sponsorState.fetching = true;
+    sponsorState.fetchError = '';
+    setPlayerBadge('loading', 'SB');
+
+    try {
+      const hash = await sha256Hex(videoId);
+      const prefix = hash.slice(0, 4);
+      const urls = buildSponsorFetchUrls(prefix, categories);
+
+      let successData = null;
+      let lastError = null;
+
+      for (const url of urls) {
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          credentials: 'omit'
+        });
+
+        if (response.status === 404) {
+          sponsorState.segments = [];
+          sponsorState.fetchError = '';
+          sponsorState.fetchedForVideoId = videoId;
+          sponsorState.currentVideoId = videoId;
+          sponsorState.markersRenderedForKey = '';
+          renderSponsorMarkers();
+          updateSkipButton(null);
+          setPlayerBadge('none', 'SB');
+          sponsorState.fetching = false;
+          return;
+        }
+
+        if (response.ok) {
+          successData = await response.json();
+          lastError = null;
+          break;
+        }
+
+        lastError = new Error(`SponsorBlock HTTP ${response.status}`);
+        if (response.status !== 400) break;
+      }
+
+      if (!successData) {
+        throw lastError || new Error('SponsorBlock request failed');
+      }
+
+      sponsorState.segments = normalizeSponsorSegmentsFromResponse(successData, videoId);
       sponsorState.fetchError = '';
       sponsorState.fetchedForVideoId = videoId;
       sponsorState.currentVideoId = videoId;
       sponsorState.markersRenderedForKey = '';
       renderSponsorMarkers();
-      updateSkipButton(null);
-      setPlayerBadge('none', 'SB');
-      return;
-    }
 
-    if (!response.ok) {
-      throw new Error(`SponsorBlock HTTP ${response.status}`);
+      if (sponsorState.segments.length) {
+        setPlayerBadge('ready', 'SB');
+      } else {
+        setPlayerBadge('none', 'SB');
+      }
+    } catch (error) {
+      sponsorState.segments = [];
+      sponsorState.fetchError = String(error && error.message ? error.message : error);
+      sponsorState.fetchedForVideoId = videoId;
+      sponsorState.currentVideoId = videoId;
+      sponsorState.markersRenderedForKey = '';
+      renderSponsorMarkers();
+      setPlayerBadge('error', 'SB');
+      console.debug('[YouTube Cleaner] SponsorBlock fetch failed:', error);
+    } finally {
+      sponsorState.fetching = false;
     }
-
-    const data = await response.json();
-    sponsorState.segments = normalizeSponsorSegmentsFromResponse(data, videoId);
-    sponsorState.fetchError = '';
-    sponsorState.fetchedForVideoId = videoId;
-    sponsorState.currentVideoId = videoId;
-    sponsorState.markersRenderedForKey = '';
-    renderSponsorMarkers();
-
-    if (sponsorState.segments.length) {
-      setPlayerBadge('ready', 'SB');
-    } else {
-      setPlayerBadge('none', 'SB');
-    }
-  } catch (error) {
-    sponsorState.segments = [];
-    sponsorState.fetchError = String(error && error.message ? error.message : error);
-    sponsorState.fetchedForVideoId = videoId;
-    sponsorState.currentVideoId = videoId;
-    sponsorState.markersRenderedForKey = '';
-    renderSponsorMarkers();
-    setPlayerBadge('error', 'SB');
-    console.debug('[YouTube Cleaner] SponsorBlock fetch failed:', error);
-  } finally {
-    sponsorState.fetching = false;
   }
-}
-  
+
   function reportSponsorViewed(uuid) {
     if (!uuid || sponsorState.reportedUUIDs.has(uuid)) return;
     sponsorState.reportedUUIDs.add(uuid);
@@ -1446,12 +1491,19 @@
   }
 
   function getMarkerHost() {
-    const host = document.querySelector('.ytp-progress-bar');
+    const host =
+      document.querySelector('.ytp-chapter-hover-container .ytp-progress-list') ||
+      document.querySelector('.ytp-progress-list') ||
+      document.querySelector('.ytp-progress-bar');
+
     if (!host) return null;
+
     const computed = getComputedStyle(host);
     if (computed.position === 'static') {
       host.style.position = 'relative';
     }
+
+    host.style.overflow = 'visible';
     return host;
   }
 
@@ -1472,6 +1524,7 @@
   function renderSponsorMarkers() {
     const host = getMarkerHost();
     const video = getVideoElement();
+    const existing = document.getElementById('yt-cleaner-sb-marker-layer');
 
     if (!host || !video || !Number.isFinite(video.duration) || video.duration <= 0 || !sbSettings.enabled || !sbSettings.showSeekBarSegments) {
       removeMarkerLayer();
@@ -1480,9 +1533,16 @@
     }
 
     const key = getMarkerRenderKey(video.duration);
-    if (sponsorState.markersRenderedForKey === key) return;
-    sponsorState.markersRenderedForKey = key;
 
+    if (
+      sponsorState.markersRenderedForKey === key &&
+      existing &&
+      existing.parentElement === host
+    ) {
+      return;
+    }
+
+    sponsorState.markersRenderedForKey = key;
     removeMarkerLayer();
 
     const layer = create('div', { id: 'yt-cleaner-sb-marker-layer' });
@@ -1494,6 +1554,7 @@
 
       if (seg.isPoint) {
         const leftPct = clamp((seg.start / video.duration) * 100, 0, 100);
+
         const marker = create('div', {
           className: 'yt-cleaner-sb-marker yt-cleaner-sb-point',
           title: sbLabel(seg.category),
@@ -1502,16 +1563,22 @@
             background: color
           }
         });
+
         layer.appendChild(marker);
         continue;
       }
 
       const start = clamp(seg.start / video.duration, 0, 1);
       const end = clamp(seg.end / video.duration, 0, 1);
-      const leftPct = start * 100;
+
+      let leftPct = start * 100;
       let widthPct = (end - start) * 100;
 
-      if (seg.actionType === 'full') widthPct = 100;
+      if (seg.actionType === 'full') {
+        leftPct = 0;
+        widthPct = 100;
+      }
+
       if (widthPct <= 0) continue;
 
       const marker = create('div', {
@@ -1739,7 +1806,7 @@
       updateSkipButton(null);
       removeMarkerLayer();
       sponsorState.markersRenderedForKey = '';
-      setPlayerBadge('off', 'SB: off');
+      setPlayerBadge('off', 'SB');
       return;
     }
 
@@ -1780,11 +1847,11 @@
     updateSkipButton(manualSeg);
 
     if (sponsorState.fetchError) {
-      setPlayerBadge('error', 'SB: error');
+      setPlayerBadge('error', 'SB');
     } else if (sponsorState.fetching) {
-      setPlayerBadge('loading', 'SB: loading');
+      setPlayerBadge('loading', 'SB');
     } else if (!sponsorState.segments.length) {
-      setPlayerBadge('none', 'SB: none');
+      setPlayerBadge('none', 'SB');
     } else {
       setPlayerBadge('ready', `SB: ${sponsorState.segments.length}`);
     }
@@ -2158,6 +2225,8 @@
 
     injectSBMenuEntry();
     injectPlayerBadge();
+
+    sponsorState.markersRenderedForKey = '';
     renderSponsorMarkers();
   }
 
@@ -2172,6 +2241,11 @@
     scheduleClean();
   }
 
+  const rerenderSponsorMarkersSoon = debounceFrame(() => {
+    sponsorState.markersRenderedForKey = '';
+    renderSponsorMarkers();
+  });
+
   // ─────────────────────────────────────────────────────────────
   //  Navigation handling
   // ─────────────────────────────────────────────────────────────
@@ -2180,7 +2254,6 @@
     if (!force && location.href === lastUrl) return;
     lastUrl = location.href;
 
-    commentsHidden = false;
     resetSponsorState();
 
     queueClean();
@@ -2223,6 +2296,7 @@
 
   new MutationObserver(() => {
     queueClean();
+    rerenderSponsorMarkersSoon();
   }).observe(document.documentElement, {
     childList: true,
     subtree: true
