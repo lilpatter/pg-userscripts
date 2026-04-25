@@ -1,0 +1,116 @@
+{
+  "instances": [
+    {
+      "app": "Invidious",
+      "region": "Europe",
+      "country": "Germany",
+      "flag": "🇩🇪",
+      "url": "https://invidious.nerdvpn.de"
+    },
+    {
+      "app": "Invidious",
+      "region": "South America",
+      "country": "Chile",
+      "flag": "🇨🇱",
+      "url": "https://inv.nadeko.net"
+    },
+    {
+      "app": "Invidious",
+      "region": "North America",
+      "country": "Canada",
+      "flag": "🇨🇦",
+      "url": "https://inv.thepixora.com"
+    },
+    {
+      "app": "Invidious",
+      "region": "North America",
+      "country": "United States",
+      "flag": "🇺🇸",
+      "url": "https://yt.chocolatemoo53.com"
+    },
+    {
+      "app": "Piped",
+      "region": "Multi",
+      "country": "Official (kavin.rocks)",
+      "flag": "🌍",
+      "url": "https://pipedapi.kavin.rocks"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Netherlands",
+      "flag": "🇳🇱",
+      "url": "https://pipedapi-libre.kavin.rocks"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Germany",
+      "flag": "🇩🇪",
+      "url": "https://pipedapi.adminforge.de"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Germany",
+      "flag": "🇩🇪",
+      "url": "https://piped-api.privacy.com.de"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Germany",
+      "flag": "🇩🇪",
+      "url": "https://api.piped.yt"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Austria",
+      "flag": "🇦🇹",
+      "url": "https://pipedapi.leptons.xyz"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Austria",
+      "flag": "🇦🇹",
+      "url": "https://api.piped.private.coffee"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Finland",
+      "flag": "🇫🇮",
+      "url": "https://pipedapi.nosebs.ru"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Czechia",
+      "flag": "🇨🇿",
+      "url": "https://piped-api.codespace.cz"
+    },
+    {
+      "app": "Piped",
+      "region": "Europe",
+      "country": "Netherlands",
+      "flag": "🇳🇱",
+      "url": "https://pipedapi.ducks.party"
+    },
+    {
+      "app": "Piped",
+      "region": "North America",
+      "country": "United States",
+      "flag": "🇺🇸",
+      "url": "https://pipedapi.drgns.space"
+    },
+    {
+      "app": "Piped",
+      "region": "North America",
+      "country": "United States",
+      "flag": "🇺🇸",
+      "url": "https://pipedapi.darkness.services"
+    }
+  ]
+}
